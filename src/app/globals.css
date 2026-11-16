@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Public Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-chalk: #f1f5f4;
+  --color-paper: #ffffff;
+  --color-ink: #12333a;
+  --color-ink-soft: #4a6168;
+  --color-line: #d5e0de;
+  --color-teal: #0f5c63;
+  --color-teal-deep: #0a4248;
+  --color-amber: #e8a317;
+  --color-ok: #1b8553;
+  --color-warn: #a86a00;
+  --color-bad: #b83227;
+  --color-ok-bg: #e2f3ea;
+  --color-warn-bg: #fbefd6;
+  --color-bad-bg: #f9e2df;
+}
+
+html { background: var(--color-chalk); color: var(--color-ink); font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; }
+body { min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+:focus-visible { outline: 3px solid var(--color-amber); outline-offset: 2px; border-radius: 6px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 2.75rem; padding: .5rem 1.1rem; border-radius: .6rem; font-weight: 600; transition: background .15s, transform .05s; cursor: pointer; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-primary { background: var(--color-teal); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--color-teal-deep); }
+.btn-quiet { background: transparent; border: 1px solid var(--color-line); color: var(--color-ink); }
+.btn-quiet:hover:not(:disabled) { background: #e6eeec; }
+.btn-danger { background: var(--color-bad); color: #fff; }
+.input { width: 100%; min-height: 2.75rem; padding: .5rem .75rem; border: 1px solid var(--color-line); border-radius: .6rem; background: var(--color-paper); }
+.panel { background: var(--color-paper); border: 1px solid var(--color-line); border-radius: .9rem; }
+.pill { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+.pill-ok { background: var(--color-ok-bg); color: var(--color-ok); }
+.pill-warn { background: var(--color-warn-bg); color: var(--color-warn); }
+.pill-bad { background: var(--color-bad-bg); color: var(--color-bad); }
+.pill-mute { background: #e6eeec; color: var(--color-ink-soft); }
+
+/* Projector ring: a single sweep per rotation period. Motion respects reduced-motion. */
+@keyframes sweep { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 100; } }
+.ring-sweep { animation: sweep var(--period, 5s) linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ring-sweep { animation: none; } }

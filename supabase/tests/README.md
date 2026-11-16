@@ -1,0 +1,1 @@
+`npm run test:db` creates a temporary PostgreSQL cluster, loads `shim.sql` (minimal stand-ins for Supabase's `auth` schema and roles), applies all migrations, runs `db.test.sql`, then `concurrency.sql` with 120 parallel `commit_qr_attendance` calls. The shim is for tests only; never apply it to a real Supabase project.
