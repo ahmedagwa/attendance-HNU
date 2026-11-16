@@ -3,14 +3,6 @@ import { cookies } from "next/headers";
 import { adminClient } from "@/lib/supabase/admin";
 import { hashInstallationId } from "@/lib/webauthn";
 
-type DeviceClaimOutcome =
-  | "created"
-  | "existing"
-  | "owned_by_another_student"
-  | "revoked"
-  | "new_installation_requires_admin"
-  | "installation_identity_changed";
-
 export type DeviceClaim =
   | { outcome: "created" | "existing"; deviceInstallationId: string; installationHash: string }
   | { outcome: "owned_by_another_student" | "revoked" | "new_installation_requires_admin"; deviceInstallationId: string; installationHash: string }
@@ -37,14 +29,33 @@ export async function claimDeviceInstallation(userId: string, installationId: st
     p_installation_id_hash: installationHash,
   });
   const result = Array.isArray(data) ? data[0] : data;
-  if (error || !result?.outcome || !result?.device_installation_id) {
-    throw new Error("Device installation claim failed: " + (error?.message ?? "empty database response"));
+  if (error) {
+    throw new Error("Device installation claim failed: " + error.message);
   }
-  return {
-    outcome: result.outcome as DeviceClaimOutcome,
-    deviceInstallationId: result.device_installation_id as string,
-    installationHash,
-  };
+  if (
+    !result ||
+    typeof result.outcome !== "string" ||
+    typeof result.device_installation_id !== "string"
+  ) {
+    throw new Error("Device installation claim failed: empty or invalid database response");
+  }
+
+  // The database RPC never returns `installation_identity_changed`; that outcome is
+  // produced above when the HttpOnly cookie and IndexedDB identity disagree. Keep the
+  // RPC result narrowed explicitly so TypeScript cannot accidentally pair that
+  // null-ID outcome with a database UUID.
+  const deviceInstallationId = result.device_installation_id;
+  switch (result.outcome) {
+    case "created":
+    case "existing":
+      return { outcome: result.outcome, deviceInstallationId, installationHash };
+    case "owned_by_another_student":
+    case "revoked":
+    case "new_installation_requires_admin":
+      return { outcome: result.outcome, deviceInstallationId, installationHash };
+    default:
+      throw new Error("Device installation claim failed: unknown database outcome");
+  }
 }
 
 /**
