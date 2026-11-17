@@ -53,7 +53,7 @@ export function Projector({ sessionId, subject }: { sessionId: string; subject: 
   const feed = arrivals.length ? arrivals : (data?.recent ?? []).map((r) => ({ key: r.studentId, name: r.fullName, idSuffix: r.universityId.slice(-4), status: r.status, at: r.checkedInAt ?? "" }));
 
   return (
-    <div className="min-h-dvh bg-ink p-6 text-white md:p-10">
+    <div className="min-h-dvh bg-projector p-6 text-white md:p-10">
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
         <div className="flex flex-col items-center justify-center">
           <p className="mb-1 text-lg text-white/70">{subject}</p>

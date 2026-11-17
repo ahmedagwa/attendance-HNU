@@ -19,10 +19,6 @@ export default async function AdminHome() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         {tiles.map(([label, n, href]) => <Link key={label} href={href} className="panel p-4 hover:border-teal"><p className="font-display text-3xl font-bold tabular-nums">{n}</p><p className="text-sm text-ink-soft">{label}</p></Link>)}
       </div>
-      <div className="panel p-4 text-sm text-ink-soft">
-        <p className="font-semibold text-ink">Before the pilot</p>
-        <p className="mt-1">Confirm the absence limit, late threshold, hall radius and who may use manual override. Measure real GPS accuracy in each hall and set its radius and maximum accuracy under Academics.</p>
-      </div>
     </div>
   );
 }

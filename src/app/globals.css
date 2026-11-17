@@ -6,6 +6,7 @@
   --color-chalk: #f1f5f4;
   --color-paper: #ffffff;
   --color-ink: #12333a;
+  --color-projector: #12333a;
   --color-ink-soft: #4a6168;
   --color-line: #d5e0de;
   --color-teal: #0f5c63;
@@ -14,12 +15,15 @@
   --color-ok: #1b8553;
   --color-warn: #a86a00;
   --color-bad: #b83227;
+  --color-bad-button: #b83227;
   --color-ok-bg: #e2f3ea;
   --color-warn-bg: #fbefd6;
   --color-bad-bg: #f9e2df;
+  --color-muted: #e6eeec;
+  --color-track: #e3ebe9;
 }
 
-html { background: var(--color-chalk); color: var(--color-ink); font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; }
+html { color-scheme: light; background: var(--color-chalk); color: var(--color-ink); font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; }
 body { min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
 h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
 :focus-visible { outline: 3px solid var(--color-amber); outline-offset: 2px; border-radius: 6px; }
@@ -30,17 +34,51 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
 .btn-primary { background: var(--color-teal); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--color-teal-deep); }
 .btn-quiet { background: transparent; border: 1px solid var(--color-line); color: var(--color-ink); }
-.btn-quiet:hover:not(:disabled) { background: #e6eeec; }
-.btn-danger { background: var(--color-bad); color: #fff; }
+.btn-quiet:hover:not(:disabled) { background: var(--color-muted); }
+.btn-danger { background: var(--color-bad-button); color: #fff; }
 .input { width: 100%; min-height: 2.75rem; padding: .5rem .75rem; border: 1px solid var(--color-line); border-radius: .6rem; background: var(--color-paper); }
 .panel { background: var(--color-paper); border: 1px solid var(--color-line); border-radius: .9rem; }
 .pill { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
 .pill-ok { background: var(--color-ok-bg); color: var(--color-ok); }
 .pill-warn { background: var(--color-warn-bg); color: var(--color-warn); }
 .pill-bad { background: var(--color-bad-bg); color: var(--color-bad); }
-.pill-mute { background: #e6eeec; color: var(--color-ink-soft); }
+.pill-mute { background: var(--color-muted); color: var(--color-ink-soft); }
 
 /* Projector ring: a single sweep per rotation period. Motion respects reduced-motion. */
 @keyframes sweep { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 100; } }
 .ring-sweep { animation: sweep var(--period, 5s) linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ring-sweep { animation: none; } }
+
+
+/* Follow the operating system appearance automatically. No theme toggle or
+   client-side hydration is needed; changes take effect as the OS preference changes. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-chalk: #0c1518;
+    --color-paper: #142226;
+    --color-ink: #e5eff0;
+    --color-ink-soft: #a8bdc1;
+    --color-line: #2d4247;
+    --color-teal: #176a70;
+    --color-teal-deep: #10545a;
+    --color-projector: #12333a;
+    --color-amber: #f0b94e;
+    --color-ok: #79d3a3;
+    --color-warn: #f2c66c;
+    --color-bad: #ff958b;
+    --color-bad-button: #a9322a;
+    --color-ok-bg: #163b2b;
+    --color-warn-bg: #403117;
+    --color-bad-bg: #482522;
+    --color-muted: #203237;
+    --color-track: #263b40;
+  }
+
+  /* Keep Tailwind's amber notices readable in dark mode. */
+  .bg-amber-50 { background-color: #3c301c; }
+  .text-amber-700,
+  .text-amber-900,
+  .text-amber-950 { color: #f2d18e; }
+  .border-amber-300 { border-color: #795f32; }
+}

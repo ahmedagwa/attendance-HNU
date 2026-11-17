@@ -125,7 +125,7 @@ export function ScannerFlow() {
         <div className="panel p-5" role="status" aria-live="polite">
           <p className="font-semibold">Checking you in…</p>
           <p className="mt-1 text-sm text-ink-soft">Confirm with your passkey if asked, and allow location access.</p>
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#e3ebe9]"><div className="h-full w-1/3 animate-pulse rounded-full bg-teal" /></div>
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-track"><div className="h-full w-1/3 animate-pulse rounded-full bg-teal" /></div>
         </div>
       )}
       {phase === "retry" && retry && (

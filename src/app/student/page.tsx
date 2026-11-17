@@ -16,7 +16,7 @@ function Ledger({ s }: { s: SubjectAttendance }) {
         <p className={`shrink-0 font-display text-lg font-bold ${s.belowLimit ? "text-bad" : ""}`}>{s.percent}%</p>
       </div>
       {/* The tick marks the required percentage: structure that carries information. */}
-      <div className="relative mt-2 h-2.5 rounded-full bg-[#e3ebe9]" role="img" aria-label={`${s.percent}% attended, ${s.requiredPercent}% required`}>
+      <div className="relative mt-2 h-2.5 rounded-full bg-track" role="img" aria-label={`${s.percent}% attended, ${s.requiredPercent}% required`}>
         <div className={`h-full rounded-full ${s.belowLimit ? "bg-bad" : "bg-teal"}`} style={{ width: `${Math.min(s.percent, 100)}%` }} />
         <div className="absolute -top-1 h-4.5 w-0.5 bg-ink" style={{ left: `${s.requiredPercent}%` }} />
       </div>

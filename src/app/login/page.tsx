@@ -22,8 +22,8 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
         <div aria-hidden className="mb-5 grid size-14 place-items-center rounded-2xl bg-teal">
           <svg viewBox="0 0 24 24" className="size-8" fill="none" stroke="#fff" strokeWidth="2"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" /><path d="M14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z" /></svg>
         </div>
-        <h1 className="text-3xl font-bold">Sign in to Attendance</h1>
-        <p className="mt-2 text-ink-soft">Use the account your university created for you. There is no public sign-up.</p>
+        <h1 className="text-3xl font-bold">Sign in</h1>
+        <p className="mt-2 text-ink-soft">Use the account your university created for you.</p>
       </div>
       <div className="panel p-5"><LoginForm next={next} notice={deviceNotice} /></div>
       <p className="mt-6 text-sm text-ink-soft">Forgot your password or lost your phone? Ask your administrator to reset your account.</p>
