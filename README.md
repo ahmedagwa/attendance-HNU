@@ -2,7 +2,7 @@
 
 A Progressive Web App for managing university attendance across **students, lecturers, teaching assistants, and administrators**. The application combines rotating QR check-ins, WebAuthn passkeys, browser/PWA installation binding, GPS geofencing, multi-group lecture sessions, and live lecturer updates.
 
-> **Project status:** MVP / controlled-pilot candidate. A successful local or hosted check-in is not, by itself, production approval. Complete the real-device, security, database, privacy, and load-testing checklist before using this system for official university records.
+> **Project status:** MVP / controlled-pilot candidate. A successful local or hosted check-in is not, by itself, production approval.
 
 ---
 
@@ -17,15 +17,10 @@ A Progressive Web App for managing university attendance across **students, lect
 - [Technology stack](#technology-stack)
 - [Repository structure](#repository-structure)
 - [Requirements](#requirements)
-- [Run locally](#run-locally)
-- [Environment variables](#environment-variables)
-- [Create the first administrator](#create-the-first-administrator)
-- [Database migrations](#database-migrations)
-- [Deploy to Vercel](#deploy-to-vercel)
+- [Run](#run)
 - [Testing](#testing)
 - [Operations and maintenance](#operations-and-maintenance)
 - [Troubleshooting](#troubleshooting)
-- [Production-readiness checklist](#production-readiness-checklist)
 
 ---
 
@@ -70,7 +65,7 @@ flowchart TD
     RT --> L
 ```
 
-The application uses a single Next.js codebase. Next.js Route Handlers perform privileged server-side operations; Supabase provides authentication, PostgreSQL, row-level security, and Realtime. Rate limiting and temporary workflow state are database-backed; Redis and a separate FastAPI service are not required by the current implementation.
+The application uses a single Next.js codebase. Next.js Route Handlers perform privileged server-side operations; Supabase provides authentication, PostgreSQL, row-level security, and Realtime. Rate limiting and temporary workflow state are database-backed;
 
 ### Core data model
 
