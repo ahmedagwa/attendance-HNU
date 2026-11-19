@@ -5,8 +5,7 @@ export const metadata = { title: "Academics" };
 export const dynamic = "force-dynamic";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day, index) => ({
-  value: String(index),
-  label: day,
+  value: String(index), label: day,
 }));
 
 function Card({ title, children, note }: { title: string; children: React.ReactNode; note?: string }) {
@@ -21,48 +20,58 @@ function Card({ title, children, note }: { title: string; children: React.ReactN
 
 export default async function Academics() {
   const db = adminClient();
-  const [groupsResult, hallsResult, subjectsResult, lecturersResult] = await Promise.all([
+  const [groupsResult, hallsResult, subjectsResult, lecturersResult, staffResult] = await Promise.all([
     db.from("student_groups").select("id, group_code, name, academic_year").order("group_code"),
     db.from("halls").select("id, name, latitude, longitude, allowed_radius_meters, max_gps_accuracy_meters, is_active").order("name"),
-    // Keep this query independent of the lecturer relationship. If a PostgREST
-    // relationship/embed fails, it must not make the subject dropdown empty.
-    db.from("subjects").select("id, code, name, lecturer_id, attendance_required_percent, is_active").order("code"),
+    db.from("subjects").select("id, code, name, attendance_required_percent, is_active").order("code"),
     db.from("profiles").select("id, full_name, university_id").eq("role", "lecturer").eq("account_status", "active").order("full_name"),
+    db.from("subject_staff").select("subject_id, user_id, assignment_role, assigned_at").order("assignment_role"),
   ]);
 
   const { data: groups, error: groupsError } = groupsResult;
   const { data: halls, error: hallsError } = hallsResult;
   const { data: subjects, error: subjectsError } = subjectsResult;
   const { data: lecturers, error: lecturersError } = lecturersResult;
+  const { data: staffAssignments, error: staffError } = staffResult;
 
-  // Surface query failures instead of silently turning them into empty dropdowns.
   for (const [label, error] of [
-    ["groups", groupsError],
-    ["halls", hallsError],
-    ["subjects", subjectsError],
-    ["lecturers", lecturersError],
+    ["groups", groupsError], ["halls", hallsError], ["subjects", subjectsError],
+    ["lecturers", lecturersError], ["subject staff", staffError],
   ] as const) {
     if (error) console.error(`[admin/academics] Failed to load ${label}:`, error.message, error.code);
   }
 
-  const lecturerNames = new Map((lecturers ?? []).map((lecturer) => [lecturer.id, lecturer.full_name]));
+  const lecturerById = new Map((lecturers ?? []).map((person) => [person.id, person]));
+  const assignmentsBySubject = new Map<string, Array<{ userId: string; name: string; universityId: string; role: string }>>();
+  for (const assignment of staffAssignments ?? []) {
+    const person = lecturerById.get(assignment.user_id);
+    const list = assignmentsBySubject.get(assignment.subject_id) ?? [];
+    list.push({
+      userId: assignment.user_id,
+      name: person?.full_name ?? "Unknown lecturer",
+      universityId: person?.university_id ?? "",
+      role: assignment.assignment_role,
+    });
+    assignmentsBySubject.set(assignment.subject_id, list);
+  }
 
   const opt = {
     groups: (groups ?? []).map((group) => ({ value: group.id, label: `${group.group_code} · ${group.name}` })),
     halls: (halls ?? []).map((hall) => ({ value: hall.id, label: hall.name })),
     subjects: (subjects ?? []).map((subject) => ({ value: subject.id, label: `${subject.code} · ${subject.name}` })),
-    lecturers: (lecturers ?? []).map((lecturer) => ({ value: lecturer.id, label: `${lecturer.full_name} (${lecturer.university_id})` })),
+    lecturers: (lecturers ?? []).map((person) => ({ value: person.id, label: `${person.full_name} (${person.university_id})` })),
   };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Academics</h1>
 
-      {(groupsError || hallsError || subjectsError || lecturersError) && (
+      {(groupsError || hallsError || subjectsError || lecturersError || staffError) && (
         <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-          Some academic data could not be loaded. Check the Next.js terminal for the exact Supabase query error.
+          Some academic data could not be loaded. Check the server logs for the exact Supabase query error.
           {subjectsError && <p className="mt-1">Subjects: {subjectsError.message} ({subjectsError.code})</p>}
           {lecturersError && <p className="mt-1">Lecturers: {lecturersError.message} ({lecturersError.code})</p>}
+          {staffError && <p className="mt-1">Teaching team: {staffError.message} ({staffError.code})</p>}
         </div>
       )}
 
@@ -89,23 +98,39 @@ export default async function Academics() {
           </ul>
         </Card>
 
-        <Card title="Subjects">
+        <Card title="Subjects" note="Create each subject once, then assign its professor and one or more teaching assistants below.">
           <ApiForm endpoint="/api/admin/subjects" submit="Add subject" fields={[
             { name: "code", label: "Code" },
             { name: "name", label: "Name" },
-            { name: "lecturer_id", label: "Lecturer", type: "select", options: opt.lecturers, optional: true },
             { name: "attendance_required_percent", label: "Attendance required (%)", type: "number", defaultValue: 75 },
           ]} />
-          <ul className="text-sm text-ink-soft">
-            {(subjects ?? []).map((subject) => (
-              <li key={subject.id}>
-                {subject.code} · {subject.name} · {subject.lecturer_id ? lecturerNames.get(subject.lecturer_id) ?? "lecturer not found" : "no lecturer"} · {subject.attendance_required_percent}% required
-              </li>
-            ))}
+          <ul className="space-y-2 text-sm text-ink-soft">
+            {(subjects ?? []).map((subject) => {
+              const team = assignmentsBySubject.get(subject.id) ?? [];
+              return <li key={subject.id} className="rounded-lg border border-line p-3">
+                <p className="font-semibold text-ink">{subject.code} · {subject.name} · {subject.attendance_required_percent}% required</p>
+                {team.length ? team.map((member) => <p key={member.userId}>{member.role === "professor" ? "Professor" : "Teaching assistant"}: {member.name} {member.universityId && `(${member.universityId})`}</p>) : <p>No teaching staff assigned yet.</p>}
+              </li>;
+            })}
           </ul>
-          {!subjectsError && (subjects ?? []).length === 0 && (
-            <p className="text-sm text-ink-soft">No subjects found. Create a subject above, then refresh this page.</p>
-          )}
+        </Card>
+
+        <Card title="Teaching team" note="Assign one professor and as many teaching assistants as needed. Both roles can host attendance for the subject.">
+          <ApiForm endpoint="/api/admin/subject-staff" submit="Assign teaching staff" successMessage="staff-assignment" fields={[
+            { name: "subjectId", label: "Subject", type: "select", options: opt.subjects },
+            { name: "userId", label: "Lecturer / teaching assistant", type: "select", options: opt.lecturers },
+            { name: "assignmentRole", label: "Assignment", type: "select", defaultValue: "teaching_assistant", options: [
+              { value: "professor", label: "Professor" },
+              { value: "teaching_assistant", label: "Teaching assistant" },
+            ] },
+          ]} />
+          <div className="border-t border-line pt-3">
+            <p className="mb-2 text-sm font-semibold">Remove an assignment</p>
+            <ApiForm endpoint="/api/admin/subject-staff" method="DELETE" submit="Remove assignment" successMessage="staff-removal" fields={[
+              { name: "subjectId", label: "Subject", type: "select", options: opt.subjects },
+              { name: "userId", label: "Lecturer / teaching assistant", type: "select", options: opt.lecturers },
+            ]} />
+          </div>
         </Card>
 
         <Card title="Enrol students" note="Paste university IDs separated by commas, spaces or new lines.">
@@ -116,12 +141,10 @@ export default async function Academics() {
               { name: "universityIds", label: "University IDs", type: "textarea", valueFormat: "string-list" },
             ]}
             successMessage="enrollment" />
-          {opt.subjects.length === 0 && !subjectsError && (
-            <p className="text-sm text-amber-700">No subjects are available to enrol yet.</p>
-          )}
+          {opt.subjects.length === 0 && !subjectsError && <p className="text-sm text-amber-700">No subjects are available to enrol yet.</p>}
         </Card>
 
-        <Card title="Timetable" note="Powers each student's Today screen.">
+        <Card title="Timetable" note="Powers each student's Today screen. Timetable entries remain group-specific.">
           <ApiForm endpoint="/api/admin/schedules" submit="Add class" fields={[
             { name: "subject_id", label: "Subject", type: "select", options: opt.subjects },
             { name: "group_id", label: "Group", type: "select", options: opt.groups },

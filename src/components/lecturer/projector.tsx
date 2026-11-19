@@ -11,7 +11,7 @@ type QrState = { payload: string; bucket: number; period: number; receivedAt: nu
  * Full-screen projector view. High contrast, legible from the back of a hall.
  * The ring sweeps once per rotation; the VERIFIER never trusts it (server time decides validity).
  */
-export function Projector({ sessionId, subject }: { sessionId: string; subject: string }) {
+export function Projector({ sessionId, subject, groups }: { sessionId: string; subject: string; groups: string[] }) {
   const { data, arrivals, realtime } = useSessionLive(sessionId);
   const [qr, setQr] = useState<QrState | null>(null);
   const [paused, setPaused] = useState(false);
@@ -57,6 +57,7 @@ export function Projector({ sessionId, subject }: { sessionId: string; subject: 
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
         <div className="flex flex-col items-center justify-center">
           <p className="mb-1 text-lg text-white/70">{subject}</p>
+          <p className="mb-1 text-sm text-white/60">Groups: {groups.join(", ") || "No groups"}</p>
           <h1 className="mb-6 text-center text-3xl font-bold md:text-5xl">{closed ? "Session closed" : paused ? "Attendance paused" : "Scan to check in"}</h1>
 
           {closed || paused ? (

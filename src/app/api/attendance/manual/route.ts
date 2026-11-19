@@ -21,9 +21,10 @@ export const POST = route(async (req) => {
   const session = await requireSessionManager(actor, body.sessionId);
   const db = adminClient();
 
-  let enrol = db.from("enrollments").select("student_id", { head: true, count: "exact" }).eq("subject_id", session.subject_id).eq("student_id", body.studentId);
-  if (session.group_id) enrol = enrol.eq("group_id", session.group_id);
-  const { count } = await enrol;
+  const { count } = session.groupIds.length
+    ? await db.from("enrollments").select("student_id", { head: true, count: "exact" })
+        .eq("subject_id", session.subject_id).eq("student_id", body.studentId).in("group_id", session.groupIds)
+    : { count: 0 };
   if (!count) throw new ApiError(422, "not_enrolled", "That student is not enrolled in this session.");
 
   const { data: previous } = await db.from("attendance_records").select("status, source").eq("session_id", session.id).eq("student_id", body.studentId).maybeSingle();

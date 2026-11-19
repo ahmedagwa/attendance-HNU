@@ -21,6 +21,9 @@ insert into student_groups (id, group_code, name, academic_year) values
 insert into subjects (id, code, name, lecturer_id) values
  ('00000000-0000-0000-0000-00000000e001','CS101','Networks','00000000-0000-0000-0000-0000000000b1'),
  ('00000000-0000-0000-0000-00000000e002','CS202','Databases','00000000-0000-0000-0000-0000000000b2');
+insert into subject_staff(subject_id, user_id, assignment_role) values
+ ('00000000-0000-0000-0000-00000000e001','00000000-0000-0000-0000-0000000000b1','professor'),
+ ('00000000-0000-0000-0000-00000000e002','00000000-0000-0000-0000-0000000000b2','professor');
 insert into enrollments values
  ('00000000-0000-0000-0000-00000000e001','00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-00000000f001'),
  ('00000000-0000-0000-0000-00000000e001','00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-00000000f001'),
@@ -30,6 +33,10 @@ insert into halls (id, name, latitude, longitude) values ('00000000-0000-0000-00
 insert into sessions (id, subject_id, group_id, hall_id, started_by, qr_secret_enc) values
  ('00000000-0000-0000-0000-0000000005e1','00000000-0000-0000-0000-00000000e001','00000000-0000-0000-0000-00000000f001','00000000-0000-0000-0000-00000000d001','00000000-0000-0000-0000-0000000000b1','x'),
  ('00000000-0000-0000-0000-0000000005e2','00000000-0000-0000-0000-00000000e002',null,'00000000-0000-0000-0000-00000000d001','00000000-0000-0000-0000-0000000000b2','x');
+insert into session_groups(session_id, group_id) values
+ ('00000000-0000-0000-0000-0000000005e1','00000000-0000-0000-0000-00000000f001'),
+ ('00000000-0000-0000-0000-0000000005e1','00000000-0000-0000-0000-00000000f002'),
+ ('00000000-0000-0000-0000-0000000005e2','00000000-0000-0000-0000-00000000f002');
 insert into device_installations (id, user_id, installation_id_hash) values
  ('00000000-0000-0000-0000-00000000aa01','00000000-0000-0000-0000-0000000000c1',repeat('1',64)),
  ('00000000-0000-0000-0000-00000000aa02','00000000-0000-0000-0000-0000000000c2',repeat('2',64));
@@ -165,14 +172,69 @@ begin
   select * into r from commit_qr_attendance(pg_temp.new_attempt(sess, s1), s2, null, null, 'present', null, null, null, null, 'ok');
   perform pg_temp.assert(r.outcome = 'attempt_not_found', 'attempt belonging to another student is rejected');
 
+  select * into r from commit_qr_attendance(pg_temp.new_attempt('00000000-0000-0000-0000-0000000005e2', s1), s1, null, null, 'present', null, null, null, null, 'ok');
+  perform pg_temp.assert(r.outcome = 'not_eligible', 'student outside the session group set cannot commit attendance');
+
   update sessions set started_at = now() - interval '2 hours' where id = '00000000-0000-0000-0000-0000000005e2';
   perform pg_temp.assert((select status from commit_qr_attendance(pg_temp.new_attempt('00000000-0000-0000-0000-0000000005e2', '00000000-0000-0000-0000-0000000000c3'), '00000000-0000-0000-0000-0000000000c3', null, null, 'auto', null, null, null, null, 'ok')) = 'late',
                          'auto status resolves to late after the late threshold (database clock)');
   delete from attendance_records where session_id = '00000000-0000-0000-0000-0000000005e2';
+  update sessions set status = 'closed', ended_at = now() where id = '00000000-0000-0000-0000-0000000005e2';
 
   update sessions set status = 'closed', ended_at = now() where id = sess;
   select * into r from commit_qr_attendance(pg_temp.new_attempt(sess, s2), s2, null, null, 'present', null, null, null, null, 'ok');
   perform pg_temp.assert(r.outcome = 'session_closed', 'closed session rejects commits');
+end $$;
+
+-- Teaching-team and multi-group session RPCs -------------------------------------------------------------------------
+select pg_temp.assert(
+  public.assign_subject_staff(
+    '00000000-0000-0000-0000-00000000e001',
+    '00000000-0000-0000-0000-0000000000b2',
+    'teaching_assistant',
+    '00000000-0000-0000-0000-0000000000a1'
+  ) = 'assigned',
+  'administrator can add a teaching assistant to a subject'
+);
+select pg_temp.assert(
+  public.assign_subject_staff(
+    '00000000-0000-0000-0000-00000000e001',
+    '00000000-0000-0000-0000-0000000000b2',
+    'teaching_assistant',
+    '00000000-0000-0000-0000-0000000000a1'
+  ) = 'already_assigned',
+  'duplicate teaching-team assignments are rejected cleanly'
+);
+select pg_temp.assert(
+  public.assign_subject_staff(
+    '00000000-0000-0000-0000-00000000e001',
+    '00000000-0000-0000-0000-0000000000b2',
+    'professor',
+    '00000000-0000-0000-0000-0000000000a1'
+  ) = 'role_conflict',
+  'one lecturer cannot hold two roles on the same subject'
+);
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000b2', true);
+select pg_temp.assert(
+  public.teaches_subject('00000000-0000-0000-0000-00000000e001'),
+  'teaching assistants receive subject-level teaching permissions'
+);
+select set_config('request.jwt.claim.sub', '', true);
+
+DO $$
+declare new_session uuid; created_outcome text;
+begin
+  select session_id, outcome into new_session, created_outcome
+  from public.create_lecture_session(
+    '00000000-0000-0000-0000-00000000e001',
+    ARRAY['00000000-0000-0000-0000-00000000f001'::uuid, '00000000-0000-0000-0000-00000000f002'::uuid],
+    '00000000-0000-0000-0000-00000000d001',
+    '00000000-0000-0000-0000-0000000000b2',
+    15, 10, 'test-secret'
+  );
+  perform pg_temp.assert(created_outcome = 'created', 'teaching staff can create a session covering both groups');
+  perform pg_temp.assert((select count(*) from public.session_groups where session_id = new_session) = 2, 'one multi-group session stores both selected groups');
+  perform pg_temp.assert((select group_id is null from public.sessions where id = new_session), 'legacy group_id is null for a multi-group session');
 end $$;
 
 -- Constraints, audit, helpers --------------------------------------------------------------------------------------------
@@ -203,7 +265,9 @@ begin
   perform pg_temp.assert((select attended from attendance_summary('00000000-0000-0000-0000-0000000000c1') where subject_code = 'CS101') = 1
                          and (select sessions_held from attendance_summary('00000000-0000-0000-0000-0000000000c1') where subject_code = 'CS101') = 1,
                          'attendance_summary counts closed sessions and present records');
-  perform pg_temp.assert((select absent from session_summary('00000000-0000-0000-0000-0000000005e1')) = 1, 'session_summary reports absent students');
+  perform pg_temp.assert((select enrolled from session_summary('00000000-0000-0000-0000-0000000005e1')) = 3
+                         and (select absent from session_summary('00000000-0000-0000-0000-0000000005e1')) = 2,
+                         'session_summary counts both selected groups in one session');
 
   update attendance_records set latitude = 1, longitude = 1, checked_in_at = now() - interval '40 days' where session_id = '00000000-0000-0000-0000-0000000005e1';
   perform pg_temp.assert(purge_raw_gps() = 1, 'raw GPS older than 30 days is purged');

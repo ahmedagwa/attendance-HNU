@@ -49,7 +49,7 @@ export default async function StudentHome() {
         <section aria-label="Open sessions" className="space-y-3">
           {d.openSessions.map((s) => (
             <div key={s.id} className="panel p-4">
-              <p className="text-sm text-ink-soft">Open now · started {formatTime(s.startedAt)} · {s.hallName}</p>
+              <p className="text-sm text-ink-soft">Open now · started {formatTime(s.startedAt)} · {s.hallName}{s.groupCode ? ` · ${s.groupCode}` : ""}</p>
               <h2 className="mt-0.5 text-xl font-bold">{s.subjectName}</h2>
               {s.checkedIn ? (
                 <p className="mt-3"><span className={statusPill[s.checkedIn]}>{s.checkedIn === "review" ? "Waiting for lecturer review" : `You're checked in (${s.checkedIn})`}</span></p>

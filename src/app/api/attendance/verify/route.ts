@@ -162,6 +162,7 @@ export const POST = route(async (req) => {
       await flag(db, attempt, actor, "duplicate_installation", "high", {});
       throw new ApiError(403, "device_conflict", "This device has already been used to check in another account.");
     case "session_closed": throw new ApiError(409, "session_not_active", "Attendance is no longer open for this session.");
+    case "not_eligible": throw new ApiError(403, "not_eligible", "You are not enrolled in a group included in this session.");
     default: throw new ApiError(400, "attempt_invalid", "This check-in expired. Scan the code on the screen again.");
   }
 

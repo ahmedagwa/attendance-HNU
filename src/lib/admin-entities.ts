@@ -20,7 +20,7 @@ export const ENTITIES = {
   subjects: {
     table: "subjects",
     create: z.object({
-      code: z.string().trim().min(2).max(20), name: z.string().trim().min(2).max(120), lecturer_id: guid.nullable().default(null),
+      code: z.string().trim().min(2).max(20), name: z.string().trim().min(2).max(120),
       attendance_required_percent: z.number().int().min(0).max(100).default(75), is_active: z.boolean().default(true),
     }),
   },

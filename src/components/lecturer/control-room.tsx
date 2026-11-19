@@ -10,7 +10,7 @@ const Tile = ({ label, value, tone = "" }: { label: string; value: number | stri
   <div className="panel p-4"><p className={`font-display text-3xl font-bold tabular-nums ${tone}`}>{value}</p><p className="text-sm text-ink-soft">{label}</p></div>
 );
 
-export function ControlRoom({ sessionId, subject }: { sessionId: string; subject: string }) {
+export function ControlRoom({ sessionId, subject, groups }: { sessionId: string; subject: string; groups: string[] }) {
   const { data, refresh, realtime } = useSessionLive(sessionId);
   const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [editing, setEditing] = useState<RosterRow | null>(null);
@@ -32,6 +32,7 @@ export function ControlRoom({ sessionId, subject }: { sessionId: string; subject
         <div>
           <p className="text-sm text-ink-soft">{closed ? "Closed" : session.status === "paused" ? "Paused" : "In progress"} · {realtime === "live" ? "live updates on" : "refreshing every 10 s"}</p>
           <h1 className="text-2xl font-bold">{subject}</h1>
+          <p className="mt-1 text-sm text-ink-soft">Groups: {groups.join(", ") || "No groups"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {!closed && <Link href={`/lecturer/sessions/${sessionId}/projector`} className="btn btn-primary">Open projector</Link>}

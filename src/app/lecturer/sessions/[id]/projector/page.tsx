@@ -9,5 +9,5 @@ export default async function ProjectorPage({ params }: { params: Promise<{ id: 
   const actor = await requirePage("lecturer");
   const session = await requireSessionManager(actor, (await params).id).catch(() => null);
   if (!session) notFound();
-  return <Projector sessionId={session.id} subject={`${session.subject.name} (${session.subject.code})`} />;
+  return <Projector sessionId={session.id} subject={`${session.subject.name} (${session.subject.code})`} groups={session.groups.map((group) => group.groupCode)} />;
 }

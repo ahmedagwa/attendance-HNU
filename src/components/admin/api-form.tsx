@@ -17,7 +17,7 @@ export type Field = {
   valueFormat?: "number" | "string-list";
 };
 
-type SuccessMessage = "enrollment" | "device-recovery";
+type SuccessMessage = "enrollment" | "device-recovery" | "staff-assignment" | "staff-removal";
 
 function getSuccessMessage(kind: SuccessMessage | undefined, result: Record<string, unknown>) {
   if (kind === "enrollment") {
@@ -33,6 +33,9 @@ function getSuccessMessage(kind: SuccessMessage | undefined, result: Record<stri
     const devices = Number(result.devicesRevoked ?? 0);
     return `Revoked ${passkeys} passkey(s) and ${devices} device(s).`;
   }
+
+  if (kind === "staff-assignment") return "Teaching staff member assigned to the subject.";
+  if (kind === "staff-removal") return "Teaching staff assignment removed.";
 
   return "Saved.";
 }

@@ -9,5 +9,5 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const actor = await requirePage("lecturer");
   const session = await requireSessionManager(actor, (await params).id).catch(() => null);
   if (!session) notFound();
-  return <ControlRoom sessionId={session.id} subject={`${session.subject.name} (${session.subject.code})`} />;
+  return <ControlRoom sessionId={session.id} subject={`${session.subject.name} (${session.subject.code})`} groups={session.groups.map((group) => group.groupCode)} />;
 }

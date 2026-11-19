@@ -60,10 +60,13 @@ export const POST = route(async (req) => {
 
   if (session.status !== "active") throw new ApiError(409, "session_not_active", "Attendance is not open for this session.");
 
-  // Eligibility: enrolled in the subject and, for group-scoped sessions, in that group. Generic on failure.
-  let enrol = db.from("enrollments").select("student_id", { head: true, count: "exact" }).eq("subject_id", session.subject_id).eq("student_id", actor.id);
-  if (session.group_id) enrol = enrol.eq("group_id", session.group_id);
-  const { count: eligible } = await enrol;
+  // Eligibility is defined by the explicit session_groups set, not the legacy group_id mirror.
+  const { data: selectedGroups } = await db.from("session_groups").select("group_id").eq("session_id", session.id);
+  const groupIds = (selectedGroups ?? []).map((row) => row.group_id);
+  const { count: eligible } = groupIds.length
+    ? await db.from("enrollments").select("student_id", { head: true, count: "exact" })
+        .eq("subject_id", session.subject_id).eq("student_id", actor.id).in("group_id", groupIds)
+    : { count: 0 };
   if (!eligible) {
     await audit(actor.id, "attendance.not_eligible", "session", session.id);
     throw new ApiError(403, "not_eligible", "You can't check in to this session.");

@@ -6,9 +6,14 @@ insert into profiles values ('00000000-0000-0000-0000-0000000000dd','DUP','Racer
 insert into profiles values ('00000000-0000-0000-0000-0000000000b1','L1','Lecturer','lecturer', 'active', now(), now());
 insert into student_groups (id, group_code, name, academic_year) values ('00000000-0000-0000-0000-00000000f001','G1','Group 1','2026/27');
 insert into subjects (id, code, name, lecturer_id) values ('00000000-0000-0000-0000-00000000e001','CS101','Networks','00000000-0000-0000-0000-0000000000b1');
+insert into subject_staff(subject_id, user_id, assignment_role) values ('00000000-0000-0000-0000-00000000e001','00000000-0000-0000-0000-0000000000b1','professor');
 insert into halls (id, name, latitude, longitude) values ('00000000-0000-0000-0000-00000000d001','Hall A',29.85,31.33);
 insert into sessions (id, subject_id, group_id, hall_id, started_by, qr_secret_enc)
   values ('00000000-0000-0000-0000-0000000005e1','00000000-0000-0000-0000-00000000e001','00000000-0000-0000-0000-00000000f001','00000000-0000-0000-0000-00000000d001','00000000-0000-0000-0000-0000000000b1','x');
+insert into session_groups(session_id, group_id) values ('00000000-0000-0000-0000-0000000005e1','00000000-0000-0000-0000-00000000f001');
+insert into enrollments(subject_id, student_id, group_id)
+  select '00000000-0000-0000-0000-00000000e001', id, '00000000-0000-0000-0000-00000000f001'
+  from profiles where role = 'student';
 insert into device_installations (user_id, installation_id_hash, id)
   select ('10000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid, 'h' || g, ('20000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid from generate_series(1, 100) g;
 insert into device_installations (user_id, installation_id_hash, id)
