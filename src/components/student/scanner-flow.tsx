@@ -12,6 +12,49 @@ type RetryInfo = { reason: "poor_accuracy" | "uncertain"; retriesLeft: number; c
 type Pass = { status: string; review: boolean; checkedInAt: string; student: { name: string; universityId: string }; subject: { code: string; name: string } };
 type ZoomCapabilities = MediaTrackCapabilities & { zoom?: number | { min: number; max: number; step?: number } };
 
+/**
+ * html5-qrcode 2.3.8 creates two object URLs synchronously inside scanFile():
+ * one is tracked by the library and one is assigned to its temporary Image.
+ * Track both during that synchronous setup and release them when decoding ends.
+ * The override is restored before the asynchronous decode continues.
+ */
+async function scanFileAndReleaseObjectUrls(
+  decoder: import("html5-qrcode").Html5Qrcode,
+  file: File,
+): Promise<string> {
+  const originalCreateObjectURL = URL.createObjectURL;
+  const createdUrls: string[] = [];
+  let patched = false;
+
+  try {
+    URL.createObjectURL = ((object: Blob | MediaSource) => {
+      const url = originalCreateObjectURL.call(URL, object);
+      createdUrls.push(url);
+      return url;
+    }) as typeof URL.createObjectURL;
+    patched = true;
+  } catch {
+    // If a browser exposes a non-writable method, keep scanning; the decoder
+    // still functions and its own tracked URL cleanup remains available.
+  }
+
+  let scanPromise: Promise<string>;
+  try {
+    scanPromise = decoder.scanFile(file, false);
+  } catch (error) {
+    for (const url of createdUrls) URL.revokeObjectURL(url);
+    throw error;
+  } finally {
+    if (patched) URL.createObjectURL = originalCreateObjectURL;
+  }
+
+  try {
+    return await scanPromise;
+  } finally {
+    for (const url of createdUrls) URL.revokeObjectURL(url);
+  }
+}
+
 const getFix = () => new Promise<Fix>((resolve, reject) =>
   navigator.geolocation.getCurrentPosition(
     (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy }), reject,
@@ -46,8 +89,13 @@ export function ScannerFlow() {
   const busy = useRef(false);
   const zoomRef = useRef(1);
   const hardwareMaxRef = useRef(1);
+  const scanGenerationRef = useRef(0);
+  const appliedHardwareZoomRef = useRef(1);
 
   const stopCamera = useCallback(async () => {
+    // Invalidate pending getUserMedia(), canvas, and decoder promises. A frame
+    // that finishes after Cancel must never be allowed to start check-in.
+    scanGenerationRef.current += 1;
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null; detectingRef.current = false;
     const stream = streamRef.current; streamRef.current = null; trackRef.current = null;
@@ -73,9 +121,14 @@ export function ScannerFlow() {
     } catch (e) { fail(e instanceof ApiFailure ? (ERRORS[e.code] ?? e.message) : "Something went wrong. Try again."); }
   }, [fail]);
 
-  const onDecoded = useCallback(async (text: string) => {
-    if (busy.current) return; busy.current = true;
-    await stopCamera(); setPhase("verifying"); setMessage(null);
+  const onDecoded = useCallback(async (text: string, generation: number) => {
+    if (generation !== scanGenerationRef.current || busy.current) return;
+    busy.current = true;
+    // Remove the Cancel control before stopping the camera and beginning the
+    // verification flow, so a late click cannot race this transition.
+    setPhase("verifying");
+    setMessage(null);
+    await stopCamera();
     try {
       const attempt = await api<Attempt>("/api/attendance/attempts", { body: { qrPayload: text, installationId: await getInstallationId() } });
       const fixPromise = getFix(); fixPromise.catch(() => undefined);
@@ -95,15 +148,32 @@ export function ScannerFlow() {
     const hardware = Math.min(next, hardwareMaxRef.current);
     const track = trackRef.current;
     if (track && hardwareMaxRef.current > 1) {
-      try { await track.applyConstraints({ advanced: [{ zoom: hardware } as MediaTrackConstraintSet] }); } catch { /* some browsers expose capabilities but reject runtime zoom */ }
+      try {
+        await track.applyConstraints({ advanced: [{ zoom: hardware } as MediaTrackConstraintSet] });
+        appliedHardwareZoomRef.current = hardware;
+      } catch {
+        // Some browsers report zoom capability but reject runtime constraints.
+        // Remove the hardware range from the slider and continue with digital
+        // crop-and-enlarge instead of leaving the green range non-functional.
+        hardwareMaxRef.current = 1;
+        appliedHardwareZoomRef.current = 1;
+        setHardwareMax(1);
+        try { await track.applyConstraints({ advanced: [{ zoom: 1 } as MediaTrackConstraintSet] }); } catch { /* retain camera's current setting */ }
+        setZoomMessage("Hardware zoom is unavailable in this browser. Digital scanning zoom is available up to 10×.");
+      }
     }
   }, []);
 
   const start = useCallback(async () => {
+    await stopCamera();
+    const generation = ++scanGenerationRef.current;
     setMessage(null); setRetry(null); setPhase("scanning"); busy.current = false; setZoom(1);
     zoomRef.current = 1; lastDecodeAtRef.current = 0;
+    hardwareMaxRef.current = 1; appliedHardwareZoomRef.current = 1;
+    setHardwareMax(1);
     try {
       await new Promise((r) => requestAnimationFrame(r));
+      if (generation !== scanGenerationRef.current) return;
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d", { willReadFrequently: true });
@@ -113,29 +183,52 @@ export function ScannerFlow() {
         video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
+      if (generation !== scanGenerationRef.current) {
+        stream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
+        return;
+      }
       streamRef.current = stream;
       const track = stream.getVideoTracks()[0];
+      if (!track) throw new Error("No camera video track is available");
       trackRef.current = track;
-      const caps = track.getCapabilities() as ZoomCapabilities;
+      const caps = typeof track.getCapabilities === "function"
+        ? track.getCapabilities() as ZoomCapabilities
+        : {} as ZoomCapabilities;
       const z = caps.zoom;
       const max = typeof z === "number" ? z : z?.max ?? 1;
       const min = typeof z === "object" ? z.min : 1;
-      const hwMax = Math.max(1, Math.min(10, max));
+      let hwMax = Math.max(1, Math.min(10, max));
+      if (typeof z !== "undefined" && max > min && hwMax > 1) {
+        const initialHardwareZoom = Math.max(1, min);
+        try {
+          await track.applyConstraints({ advanced: [{ zoom: initialHardwareZoom } as MediaTrackConstraintSet] });
+          appliedHardwareZoomRef.current = initialHardwareZoom;
+        } catch {
+          // A reported capability is not enough: only expose hardware zoom
+          // after the browser accepts an actual camera constraint.
+          hwMax = 1;
+          appliedHardwareZoomRef.current = 1;
+        }
+      }
+      if (generation !== scanGenerationRef.current) {
+        stream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
+        return;
+      }
       hardwareMaxRef.current = hwMax;
       setHardwareMax(hwMax);
-      if (typeof z !== "undefined" && max > min) {
-        try { await track.applyConstraints({ advanced: [{ zoom: Math.min(Math.max(1, min), max) } as MediaTrackConstraintSet] }); }
-        catch { /* camera remains at its default optical zoom */ }
-      }
 
       video.srcObject = stream;
       await video.play();
+      if (generation !== scanGenerationRef.current) return;
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      if (generation !== scanGenerationRef.current) return;
       const decoderHost = document.getElementById("qr-decoder-engine");
       if (!decoderHost) throw new Error("QR decoder host is unavailable");
       decoderHost.innerHTML = "";
       const decoder = new Html5Qrcode("qr-decoder-engine", {
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        // Keep decoding on html5-qrcode's ZXing implementation on every browser.
+        useBarCodeDetectorIfSupported: false,
         verbose: false,
       });
       scanner.current = decoder;
@@ -143,21 +236,27 @@ export function ScannerFlow() {
         ? `Hardware zoom to ${hwMax.toFixed(1)}×, then digital scanning zoom to 10×`
         : "Digital scanning zoom to 10× (camera has no adjustable hardware zoom)");
 
-      // Use html5-qrcode's own image decoder for every frame. The canvas crop is
-      // converted to a File and passed to scanFile(), so no second QR engine is needed.
+      // Use the same html5-qrcode ZXing decoder for cropped/upscaled frames.
+      // scanFile() is run serially at a modest cadence; the helper also releases
+      // both temporary object URLs created by html5-qrcode 2.3.8 per frame.
       const scanFrame = async (now: number) => {
-        if (busy.current || !scanner.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          if (!busy.current && scanner.current) frameRef.current = requestAnimationFrame(scanFrame);
+        if (generation !== scanGenerationRef.current) return;
+        const activeDecoder = scanner.current;
+        if (busy.current || !activeDecoder || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          if (generation === scanGenerationRef.current && !busy.current && activeDecoder) {
+            frameRef.current = requestAnimationFrame(scanFrame);
+          }
           return;
         }
-        if (!detectingRef.current && now - lastDecodeAtRef.current >= 280) {
+        if (!detectingRef.current && now - lastDecodeAtRef.current >= 450) {
           detectingRef.current = true;
           lastDecodeAtRef.current = now;
           try {
             const vw = video.videoWidth;
             const vh = video.videoHeight;
+            if (!vw || !vh) throw new Error("Camera frame is not ready");
             const currentZoom = zoomRef.current;
-            const optical = Math.max(1, Math.min(currentZoom, hardwareMaxRef.current));
+            const optical = Math.max(1, Math.min(currentZoom, appliedHardwareZoomRef.current));
             const digital = Math.max(1, currentZoom / optical);
             const cropW = vw / digital;
             const cropH = vh / digital;
@@ -165,28 +264,33 @@ export function ScannerFlow() {
             const sy = (vh - cropH) / 2;
             canvas.width = vw;
             canvas.height = vh;
-            // Upscale the cropped region back to the full frame dimensions.
             ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, vw, vh);
             const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
-            if (blob && scanner.current && !busy.current) {
+            if (blob && generation === scanGenerationRef.current && scanner.current === activeDecoder && !busy.current) {
               const frameFile = new File([blob], "qr-frame.jpg", { type: "image/jpeg" });
               try {
-                const decoded = await scanner.current.scanFile(frameFile, false);
-                if (decoded) { await onDecoded(decoded); return; }
+                const decoded = await scanFileAndReleaseObjectUrls(activeDecoder, frameFile);
+                if (generation === scanGenerationRef.current && scanner.current === activeDecoder && decoded) {
+                  await onDecoded(decoded, generation);
+                  return;
+                }
               } catch {
-                // A frame without a QR code is expected; keep scanning the next frame.
+                // A frame without a QR code is expected; continue with the next.
               }
             }
           } catch {
             // Ignore an individual frame processing error and continue scanning.
           } finally {
-            detectingRef.current = false;
+            if (generation === scanGenerationRef.current) detectingRef.current = false;
           }
         }
-        if (scanner.current && !busy.current) frameRef.current = requestAnimationFrame(scanFrame);
+        if (generation === scanGenerationRef.current && scanner.current === activeDecoder && !busy.current) {
+          frameRef.current = requestAnimationFrame(scanFrame);
+        }
       };
       frameRef.current = requestAnimationFrame(scanFrame);
     } catch (e) {
+      if (generation !== scanGenerationRef.current) return;
       await stopCamera();
       const denied = e instanceof Error && /permission|denied|NotAllowed/i.test(e.message + e.name);
       fail(denied

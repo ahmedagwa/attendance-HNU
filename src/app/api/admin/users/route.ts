@@ -50,7 +50,6 @@ export const PATCH = route(async (req) => {
   return json({ ok: true });
 });
 
-
 const deleteSchema = z.object({ id: guid });
 
 /** Permanently remove an account from Supabase Auth and its cascading profile data. */
@@ -63,7 +62,7 @@ export const DELETE = route(async (req) => {
   const db = adminClient();
   const { data: target, error: targetError } = await db
     .from("profiles")
-    .select("id, university_id, full_name, role")
+    .select("id, role")
     .eq("id", id)
     .maybeSingle();
   if (targetError) throw new ApiError(500, "lookup_failed", "Could not verify that account.");
@@ -76,31 +75,23 @@ export const DELETE = route(async (req) => {
     if ((count ?? 0) <= 1) throw new ApiError(409, "last_admin", "The last administrator account cannot be deleted.");
   }
 
-  // Session history is retained. The account-deletion migration changes the
-  // creator/issuer foreign keys to ON DELETE SET NULL, preserving records while
-  // removing the deleted person's identity link.
+  // Session and verification history is retained by the profile foreign keys
+  // configured with ON DELETE SET NULL. Audit actor IDs are intentionally
+  // retained as opaque UUIDs; the append-only audit table has no profile FK.
+  const { error: deleteError } = await db.auth.admin.deleteUser(id);
+  if (deleteError) {
+    // Keep the user-facing response generic, but record enough server-side
+    // diagnostics to identify Auth/Postgres failures without logging PII.
+    console.error("[ADMIN USER DELETE ERROR]", {
+      userId: id,
+      message: deleteError.message,
+      status: deleteError.status,
+      code: deleteError.code,
+    });
+    throw new ApiError(422, "delete_failed", "The account could not be deleted. Check the server logs for the underlying error.");
+  }
 
-const { error: deleteError } = await db.auth.admin.deleteUser(id);
-
-if (deleteError) {
-  console.error("[ADMIN USER DELETE ERROR]", {
-    message: deleteError.message,
-    details: deleteError,
-    userId: id,
-  });
-
-  throw new ApiError(
-    422,
-    "delete_failed",
-    "The account could not be deleted. Check database constraints and linked records."
-  );
-}
-  if (deleteError) throw new ApiError(422, "delete_failed", "The account could not be deleted. Check database constraints and linked records.");
-
-  await audit(actor.id, "user.deleted", "user", id, {
-    university_id: target.university_id,
-    full_name: target.full_name,
-    role: target.role,
-  });
+  // Do not copy the deleted person's name or university ID into immutable logs.
+  await audit(actor.id, "user.deleted", "user", id, { role: target.role });
   return json({ ok: true });
 });
