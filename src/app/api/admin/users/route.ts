@@ -81,6 +81,10 @@ export const DELETE = route(async (req) => {
   // removing the deleted person's identity link.
 
   const { error: deleteError } = await db.auth.admin.deleteUser(id);
+  console.error("[ADMIN USER DELETE ERROR]", {
+  message: error instanceof Error ? error.message : String(error),
+  details: error,
+});
   if (deleteError) throw new ApiError(422, "delete_failed", "The account could not be deleted. Check database constraints and linked records.");
 
   await audit(actor.id, "user.deleted", "user", id, {
