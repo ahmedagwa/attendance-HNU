@@ -80,11 +80,21 @@ export const DELETE = route(async (req) => {
   // creator/issuer foreign keys to ON DELETE SET NULL, preserving records while
   // removing the deleted person's identity link.
 
-  const { error: deleteError } = await db.auth.admin.deleteUser(id);
+const { error: deleteError } = await db.auth.admin.deleteUser(id);
+
+if (deleteError) {
   console.error("[ADMIN USER DELETE ERROR]", {
-  message: error instanceof Error ? error.message : String(error),
-  details: error,
-});
+    message: deleteError.message,
+    details: deleteError,
+    userId: id,
+  });
+
+  throw new ApiError(
+    422,
+    "delete_failed",
+    "The account could not be deleted. Check database constraints and linked records."
+  );
+}
   if (deleteError) throw new ApiError(422, "delete_failed", "The account could not be deleted. Check database constraints and linked records.");
 
   await audit(actor.id, "user.deleted", "user", id, {
