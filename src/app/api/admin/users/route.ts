@@ -76,19 +76,12 @@ export const DELETE = route(async (req) => {
     if ((count ?? 0) <= 1) throw new ApiError(409, "last_admin", "The last administrator account cannot be deleted.");
   }
 
-  // These foreign keys intentionally restrict deletion to preserve session and
-  // spot-check accountability. Return a useful message instead of a DB error.
-  const [{ count: sessionCount, error: sessionsError }, { count: challengeCount, error: challengesError }] = await Promise.all([
-    db.from("sessions").select("id", { count: "exact", head: true }).eq("started_by", id),
-    db.from("reverification_challenges").select("id", { count: "exact", head: true }).eq("issued_by", id),
-  ]);
-  if (sessionsError || challengesError) throw new ApiError(500, "dependency_check_failed", "Could not check this account's linked records.");
-  if ((sessionCount ?? 0) > 0 || (challengeCount ?? 0) > 0) {
-    throw new ApiError(409, "account_has_history", "This account created sessions or issued verification challenges. Reassign or otherwise resolve those records before deleting it; you can suspend the account in the meantime.");
-  }
+  // Session history is retained. The account-deletion migration changes the
+  // creator/issuer foreign keys to ON DELETE SET NULL, preserving records while
+  // removing the deleted person's identity link.
 
   const { error: deleteError } = await db.auth.admin.deleteUser(id);
-  if (deleteError) throw new ApiError(422, "delete_failed", "The account could not be deleted. It may still have protected records linked to it.");
+  if (deleteError) throw new ApiError(422, "delete_failed", "The account could not be deleted. Check database constraints and linked records.");
 
   await audit(actor.id, "user.deleted", "user", id, {
     university_id: target.university_id,

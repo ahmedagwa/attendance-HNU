@@ -9,7 +9,7 @@ import type { Actor } from "../auth";
 export type SessionGroup = { id: string; groupCode: string; name: string };
 export type SessionRow = {
   id: string; subject_id: string; group_id: string | null; groupIds: string[]; groups: SessionGroup[];
-  hall_id: string; started_by: string;
+  hall_id: string; started_by: string | null;
   status: "active" | "paused" | "closed"; started_at: string; ended_at: string | null;
   late_threshold_minutes: number; qr_period_seconds: number; qr_secret_enc: string;
   subject: { id: string; code: string; name: string; lecturer_id: string | null };

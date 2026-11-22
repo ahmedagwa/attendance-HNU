@@ -22,7 +22,7 @@ export function UserStatusButton({ id, status, universityId, fullName, role }: {
       }}>{status === "active" ? "Suspend" : "Reactivate"}</button>
       <button className="font-semibold text-bad underline disabled:opacity-50" disabled={busy || deleting} onClick={async () => {
         const confirmed = window.confirm(
-          `Permanently delete this account?\n\n${fullName} (${universityId})\nRole: ${role}\n\nThis cannot be undone. Student enrollments, attendance records, passkeys, and linked device assignments may also be deleted. Accounts responsible for sessions or verification challenges are protected.`
+          `Permanently delete this account?\n\n${fullName} (${universityId})\nRole: ${role}\n\nThis cannot be undone. Student enrollments, attendance records, passkeys, and linked device assignments may also be deleted. Session and verification history will be retained, but the deleted account will no longer be shown as their creator. Student attendance and enrollment records linked to this account may be permanently deleted.`
         );
         if (!confirmed) return;
         setDeleting(true);
