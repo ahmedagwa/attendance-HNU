@@ -26,7 +26,7 @@ export default async function People() {
           <thead className="border-b border-line text-ink-soft"><tr><th className="p-3">ID</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
           <tbody>{(data ?? []).map((u) => (
             <tr key={u.id} className="border-b border-line last:border-0"><td className="p-3 tabular-nums">{u.university_id}</td><td className="font-semibold">{u.full_name}</td><td>{u.role}</td>
-              <td><span className={u.account_status === "active" ? "pill pill-ok" : "pill pill-bad"}>{u.account_status}</span></td><td className="p-3 text-right"><UserStatusButton id={u.id} status={u.account_status} /></td></tr>))}</tbody>
+              <td><span className={u.account_status === "active" ? "pill pill-ok" : "pill pill-bad"}>{u.account_status}</span></td><td className="p-3 text-right"><UserStatusButton id={u.id} status={u.account_status} universityId={u.university_id} fullName={u.full_name} role={u.role} /></td></tr>))}</tbody>
         </table></div>
       </section>
     </div>
