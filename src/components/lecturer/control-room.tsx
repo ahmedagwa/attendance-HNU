@@ -10,7 +10,7 @@ const Tile = ({ label, value, tone = "" }: { label: string; value: number | stri
   <div className="panel p-4"><p className={`font-display text-3xl font-bold tabular-nums ${tone}`}>{value}</p><p className="text-sm text-ink-soft">{label}</p></div>
 );
 
-export function ControlRoom({ sessionId, subject, groups }: { sessionId: string; subject: string; groups: string[] }) {
+export function ControlRoom({ sessionId, subjectId, subject, groups, isSessionStarter, hasRosterWorkbook }: { sessionId: string; subjectId: string; subject: string; groups: string[]; isSessionStarter: boolean; hasRosterWorkbook: boolean }) {
   const { data, refresh, realtime } = useSessionLive(sessionId);
   const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [editing, setEditing] = useState<RosterRow | null>(null);
@@ -19,6 +19,28 @@ export function ControlRoom({ sessionId, subject, groups }: { sessionId: string;
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try { await fn(); setNotice({ kind: "ok", text: ok }); await refresh(); }
     catch (e) { setNotice({ kind: "err", text: e instanceof ApiFailure ? e.message : "That didn't work. Try again." }); }
+  };
+
+  const closeSession = async () => {
+    try {
+      const result = await api<{ rosterWorkbook?: { status: string; sessionNumber?: number; message?: string } }>(`/api/sessions/${sessionId}/close`, { method: "POST", body: {} });
+      await refresh();
+      const sync = result.rosterWorkbook;
+      if (sync?.status === "failed" || sync?.status === "busy") {
+        setNotice({ kind: "err", text: `Session closed, but your Excel workbook was not updated: ${sync.message ?? "Try updating it again from this page."}` });
+      } else if (sync?.status === "updated") {
+        setNotice({ kind: "ok", text: `Session closed. Session ${sync.sessionNumber} was added to ${isSessionStarter ? "your" : "the session starter’s"} Excel workbook.` });
+      } else {
+        setNotice({ kind: "ok", text: "Session closed." });
+      }
+    } catch (e) { setNotice({ kind: "err", text: e instanceof ApiFailure ? e.message : "Could not close the session." }); }
+  };
+
+  const retryWorkbookSync = async () => {
+    try {
+      const result = await api<{ rosterWorkbook: { sessionNumber?: number; matched?: number } }>(`/api/sessions/${sessionId}/roster-workbook/sync`, { method: "POST", body: {} });
+      setNotice({ kind: "ok", text: `Excel workbook updated${result.rosterWorkbook.sessionNumber ? ` · Session ${result.rosterWorkbook.sessionNumber}` : ""}${result.rosterWorkbook.matched != null ? ` · ${result.rosterWorkbook.matched} IDs matched` : ""}.` });
+    } catch (e) { setNotice({ kind: "err", text: e instanceof ApiFailure ? e.message : "Could not update the Excel workbook." }); }
   };
 
   if (!data) return <p className="panel p-6 text-ink-soft" role="status">Loading session…</p>;
@@ -37,7 +59,9 @@ export function ControlRoom({ sessionId, subject, groups }: { sessionId: string;
         <div className="flex flex-wrap gap-2">
           {!closed && <Link href={`/lecturer/sessions/${sessionId}/projector`} className="btn btn-primary">Open projector</Link>}
           {!closed && <button className="btn btn-quiet" onClick={() => run(() => api(`/api/sessions/${sessionId}/pause`, { body: { paused: session.status !== "paused" } }), session.status === "paused" ? "Check-in resumed." : "Check-in paused.")}>{session.status === "paused" ? "Resume" : "Pause"}</button>}
-          {!closed && <button className="btn btn-danger" onClick={() => confirm("Close this session? Students will no longer be able to check in.") && run(() => api(`/api/sessions/${sessionId}/close`, { method: "POST", body: {} }), "Session closed.")}>Close session</button>}
+          {!closed && <button className="btn btn-danger" onClick={() => confirm("Close this session? Students will no longer be able to check in.") && closeSession()}>Close session</button>}
+          {isSessionStarter && hasRosterWorkbook && <a className="btn btn-quiet" href={`/api/lecturer/rosters/${subjectId}`}>Download my Excel</a>}
+          {closed && isSessionStarter && hasRosterWorkbook && <button className="btn btn-quiet" onClick={retryWorkbookSync}>Retry Excel update</button>}
           <a className="btn btn-quiet" href={`/api/sessions/${sessionId}/export`}>Export CSV</a>
         </div>
       </div>

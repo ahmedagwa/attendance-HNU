@@ -14,7 +14,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
     if (await hasActiveDeviceBinding(actor.id)) redirect(homeFor(actor.role));
     deviceNotice = "This student session is not linked to an approved browser or installed app. Sign in below from the browser/PWA assigned to this student. If you changed phones, browsers or cleared site data, ask an administrator to verify and reset the old device first.";
   } else if (device === "unlinked") {
-    deviceNotice = "This browser does not have an active device assignment for the signed-in student. Sign in through this page to verify the installation, or contact your administrator if this is a new phone/browser.";
+    deviceNotice = "Your current sign-in session is missing its verified device assignment. Sign in using the browser or installed app previously approved for this student. A replacement phone, different browser, or cleared site data may require an administrator to reset and approve the device.";
   }
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-12">

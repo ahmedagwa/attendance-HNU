@@ -15,15 +15,44 @@ function Ledger({ s }: { s: SubjectAttendance }) {
         <p className="min-w-0 truncate font-semibold">{s.name} <span className="font-normal text-ink-soft">{s.code}</span></p>
         <p className={`shrink-0 font-display text-lg font-bold ${s.belowLimit ? "text-bad" : ""}`}>{s.percent}%</p>
       </div>
-      {/* The tick marks the required percentage: structure that carries information. */}
-      <div className="relative mt-2 h-2.5 rounded-full bg-track" role="img" aria-label={`${s.percent}% attended, ${s.requiredPercent}% required`}>
+      <div className="relative mt-2 h-2.5 rounded-full bg-track" role="img" aria-label={`${s.percent}% overall attendance, ${s.requiredPercent}% required`}>
         <div className={`h-full rounded-full ${s.belowLimit ? "bg-bad" : "bg-teal"}`} style={{ width: `${Math.min(s.percent, 100)}%` }} />
         <div className="absolute -top-1 h-4.5 w-0.5 bg-ink" style={{ left: `${s.requiredPercent}%` }} />
       </div>
       <p className="mt-1.5 text-sm text-ink-soft">
-        {s.held === 0 ? "No sessions held yet" : `${s.attended} of ${s.held} sessions · ${s.requiredPercent}% required`}
+        {s.held === 0 ? "No sessions held yet" : `${s.attended} of ${s.held} sessions overall · ${s.requiredPercent}% required`}
         {s.belowLimit && s.held > 0 && <span className="ml-2 font-semibold text-bad">Below the absence limit</span>}
       </p>
+
+      {s.staffAttendance.length > 0 && (
+        <div className="mt-4 space-y-3 border-t border-line pt-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Attendance by teaching staff</p>
+          {s.staffAttendance.map((staff) => {
+            const roleLabel = staff.role === "professor" ? "Professor" : "Teaching assistant";
+            const percent = staff.percent;
+            return (
+              <div key={staff.staffId} className="space-y-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="min-w-0 text-sm font-semibold">{roleLabel}: <span className="font-normal">{staff.fullName}</span></p>
+                  <p className={`shrink-0 font-display text-sm font-bold ${staff.belowLimit ? "text-bad" : ""}`}>{percent === null ? "—" : `${percent}%`}</p>
+                </div>
+                <div
+                  className="relative h-2 rounded-full bg-track"
+                  role="img"
+                  aria-label={percent === null ? `${roleLabel} ${staff.fullName}: no sessions held yet` : `${roleLabel} ${staff.fullName}: ${percent}% attendance across ${staff.held} sessions; ${s.requiredPercent}% required`}
+                >
+                  {percent !== null && <div className={`h-full rounded-full ${staff.belowLimit ? "bg-bad" : "bg-teal"}`} style={{ width: `${Math.min(percent, 100)}%` }} />}
+                  <div className="absolute -top-1 h-4 w-0.5 bg-ink" style={{ left: `${s.requiredPercent}%` }} />
+                </div>
+                <p className="text-xs text-ink-soft">
+                  {staff.held === 0 ? "No sessions opened by this staff member yet" : `${staff.attended} attended out of ${staff.held} sessions · ${s.requiredPercent}% required`}
+                  {staff.belowLimit && <span className="ml-2 font-semibold text-bad">Below the absence limit</span>}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </li>
   );
 }

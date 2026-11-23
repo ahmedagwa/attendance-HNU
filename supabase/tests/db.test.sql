@@ -221,6 +221,14 @@ select pg_temp.assert(
 );
 select set_config('request.jwt.claim.sub', '', true);
 
+begin;
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000b2');
+select pg_temp.assert((select count(*) from sessions where id = '00000000-0000-0000-0000-0000000005e1') = 0,
+  'assigned teaching assistant cannot see a professor session they did not start');
+select pg_temp.assert((select count(*) from attendance_records where session_id = '00000000-0000-0000-0000-0000000005e1') = 0,
+  'assigned teaching assistant cannot see another staff member session attendance');
+rollback;
+
 DO $$
 declare new_session uuid; created_outcome text;
 begin

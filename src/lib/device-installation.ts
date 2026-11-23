@@ -11,17 +11,75 @@ export type DeviceClaim =
 /**
  * Atomically binds one browser/PWA installation to one student account.
  * The raw installation ID is never written to PostgreSQL; only its keyed hash is stored.
+ *
+ * The HttpOnly cookie is the server-verified anchor for an already registered browser.
+ * IndexedDB can legitimately be recreated (for example, after a browser storage issue),
+ * and the installation-hash key may be migrated independently of the QR encryption key.
+ * If the cookie still points to an active installation owned by this same student, keep
+ * using that binding instead of treating the changed client-side ID/hash as a new device.
+ *
+ * A cookie belonging to another student is still rejected. A revoked cookie binding is
+ * not reused: the normal database claim path must register a fresh installation after
+ * an administrator has reset the previous one.
  */
 export async function claimDeviceInstallation(userId: string, installationId: string): Promise<DeviceClaim> {
   const db = adminClient();
   const installationHash = hashInstallationId(installationId);
 
-  // HttpOnly cookie survives ordinary IndexedDB clearing and prevents the client from
-  // silently replacing its installation ID while the browser binding still exists.
   const cookieStore = await cookies();
   const cookieHash = cookieStore.get("attendance_device_binding")?.value;
-  if (cookieHash && cookieHash !== installationHash) {
-    return { outcome: "installation_identity_changed", deviceInstallationId: null, installationHash };
+
+  if (cookieHash && !/^[a-f0-9]{64}$/i.test(cookieHash)) {
+    console.error("[device-lock] ignoring malformed device-binding cookie");
+  } else if (cookieHash && cookieHash !== installationHash) {
+    // Check the cookie's database owner before falling back to the new client ID.
+    // This preserves account-switch protection even when IndexedDB has been recreated.
+    const { data: cookieDevice, error: cookieLookupError } = await db
+      .from("device_installations")
+      .select("id, user_id, revoked_at")
+      .eq("installation_id_hash", cookieHash)
+      .maybeSingle();
+
+    if (cookieLookupError) {
+      console.error("[device-lock] cookie binding lookup failed:", {
+        code: cookieLookupError.code,
+        message: cookieLookupError.message,
+      });
+      throw new Error("Could not verify the saved student browser installation.");
+    }
+
+    if (cookieDevice && cookieDevice.user_id !== userId) {
+      return {
+        outcome: "owned_by_another_student",
+        deviceInstallationId: cookieDevice.id,
+        installationHash: cookieHash,
+      };
+    }
+
+    if (cookieDevice && cookieDevice.user_id === userId && cookieDevice.revoked_at === null) {
+      const { error: touchError } = await db
+        .from("device_installations")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", cookieDevice.id);
+
+      if (touchError) {
+        console.error("[device-lock] failed to update cookie-bound installation:", {
+          code: touchError.code,
+          message: touchError.message,
+        });
+        throw new Error("Could not update the student browser installation.");
+      }
+
+      // The HttpOnly cookie is still a valid active assignment for this account.
+      // Keep using its hash so attendance attempts and commits reference the same row.
+      return {
+        outcome: "existing",
+        deviceInstallationId: cookieDevice.id,
+        installationHash: cookieHash,
+      };
+    }
+    // If the cookie row is revoked or no longer exists, continue to the atomic claim.
+    // That path permits a fresh ID only when no other active student assignment exists.
   }
 
   const { data, error } = await db.rpc("claim_device_installation", {
@@ -40,10 +98,6 @@ export async function claimDeviceInstallation(userId: string, installationId: st
     throw new Error("Device installation claim failed: empty or invalid database response");
   }
 
-  // The database RPC never returns `installation_identity_changed`; that outcome is
-  // produced above when the HttpOnly cookie and IndexedDB identity disagree. Keep the
-  // RPC result narrowed explicitly so TypeScript cannot accidentally pair that
-  // null-ID outcome with a database UUID.
   const deviceInstallationId = result.device_installation_id;
   switch (result.outcome) {
     case "created":

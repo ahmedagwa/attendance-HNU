@@ -3,6 +3,7 @@ import { requirePage } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { serverEnv } from "@/lib/env";
 import { formatDateTime } from "@/lib/time";
+import { RosterWorkbooks } from "@/components/lecturer/roster-workbooks";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -20,9 +21,10 @@ export default async function LecturerDashboard() {
     ? await db.from("subjects").select("id, code, name").in("id", subjectIds).eq("is_active", true).order("code")
     : { data: [] as Array<{ id: string; code: string; name: string }> };
   const ids = (subjects ?? []).map((s) => s.id);
-  const [{ data: enrol }, { data: sessions }] = await Promise.all([
+  const [{ data: enrol }, { data: sessions }, { data: workbookRows }] = await Promise.all([
     ids.length ? db.from("enrollments").select("subject_id, group:student_groups(group_code)").in("subject_id", ids) : Promise.resolve({ data: [] as never[] }),
-    ids.length ? db.from("sessions").select("id, status, started_at, subject_id, subject:subjects(code, name), hall:halls(name)").in("subject_id", ids).order("started_at", { ascending: false }).limit(12) : Promise.resolve({ data: [] as never[] }),
+    ids.length ? db.from("sessions").select("id, status, started_at, subject_id, subject:subjects(code, name), hall:halls(name)").in("subject_id", ids).eq("started_by", actor.id).order("started_at", { ascending: false }).limit(12) : Promise.resolve({ data: [] as never[] }),
+    ids.length ? db.from("staff_roster_workbooks").select("id, subject_id, original_filename, updated_at").eq("staff_user_id", actor.id).in("subject_id", ids) : Promise.resolve({ data: [] as never[] }),
   ]);
   const sessionIds = (sessions ?? []).map((session) => session.id);
   const { data: sessionGroupRows } = sessionIds.length
@@ -73,9 +75,11 @@ export default async function LecturerDashboard() {
         )}
       </section>
 
+      <RosterWorkbooks subjects={(subjects ?? []).map((s) => ({ id: s.id, code: s.code, name: s.name }))} workbooks={(workbookRows ?? []) as Array<{ id: string; subject_id: string; original_filename: string; updated_at: string }>} />
+
       <section>
         <h2 className="mb-3 text-lg font-bold">Recent sessions</h2>
-        {rows.length === 0 ? <p className="panel p-4 text-ink-soft">Sessions you run will appear here.</p> : (
+        {rows.length === 0 ? <p className="panel p-4 text-ink-soft">Only sessions you opened appear here. Sessions opened by other teaching staff remain private to them.</p> : (
           <div className="panel overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line text-ink-soft"><tr><th className="p-3">When</th><th>Subject</th><th>Present</th><th>Late</th><th>Review</th><th>Absent</th><th></th></tr></thead>

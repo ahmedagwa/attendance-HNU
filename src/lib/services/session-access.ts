@@ -15,7 +15,7 @@ export type SessionRow = {
   subject: { id: string; code: string; name: string; lecturer_id: string | null };
 };
 
-/** A session can be managed by its starter, any assigned subject staff member, or an admin. */
+/** A lecturer can manage only their own session; administrators retain an override. */
 export async function requireSessionManager(actor: Actor, sessionId: string): Promise<SessionRow> {
   if (!isUuid(sessionId)) throw new ApiError(404, "not_found");
   const db = adminClient();
@@ -26,15 +26,11 @@ export async function requireSessionManager(actor: Actor, sessionId: string): Pr
     .maybeSingle();
   if (!s) throw new ApiError(404, "not_found");
 
-  let allowed = actor.role === "admin" || (actor.role === "lecturer" && s.started_by === actor.id);
-  if (!allowed && actor.role === "lecturer") {
-    const { data: assignment } = await db.from("subject_staff")
-      .select("subject_id")
-      .eq("subject_id", s.subject_id)
-      .eq("user_id", actor.id)
-      .maybeSingle();
-    allowed = Boolean(assignment);
-  }
+  // Lecturer sessions are private to the staff member who created them.
+  // Being assigned to the same subject does not grant access to another tutor's
+  // control room, attendance records, flags, projector, or export endpoints.
+  // Administrators retain the existing recovery/oversight override.
+  const allowed = actor.role === "admin" || (actor.role === "lecturer" && s.started_by === actor.id);
   if (!allowed) throw new ApiError(404, "not_found");
 
   const { data: groupRows } = await db.from("session_groups")

@@ -45,13 +45,10 @@ export function NewSessionForm({ subjects, halls, groups }: Props) {
       router.push(`/lecturer/sessions/${id}/projector`);
     } catch (err) {
       if (err instanceof ApiFailure && err.code === "session_already_open") {
-        const existingSessionId = err.data.sessionId;
-        if (typeof existingSessionId === "string") {
-          router.push(`/lecturer/sessions/${existingSessionId}`);
-          return;
-        }
+        setError("A session is already open for one or more selected groups. Only the staff member who opened that session can manage it. Choose another available group or coordinate with the teaching team.");
+      } else {
+        setError(err instanceof ApiFailure ? err.message : "Could not start the session.");
       }
-      setError(err instanceof ApiFailure ? err.message : "Could not start the session.");
       setBusy(false);
     }
   }
